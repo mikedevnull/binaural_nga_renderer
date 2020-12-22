@@ -78,6 +78,11 @@ def parse_command_line():
     parser.add_argument("input_file")
     parser.add_argument("output_file")
 
+    parser.add_argument("--enable-output-normalization",
+                        help="Normalize maximum amplitude of output file",
+                        dest="normalize",
+                        action="store_true")
+
     parser.add_argument("--strict",
                         help="treat unknown ADM attributes as errors",
                         action="store_true")
@@ -108,7 +113,8 @@ def render_file():
 
         driver.run(args.input_file, args.output_file)
 
-        normalize_file(args.output_file, args.output_file)
+        if args.normalize:
+            normalize_file(args.output_file, args.output_file)
 
     except Exception as error:
         if args.debug:
