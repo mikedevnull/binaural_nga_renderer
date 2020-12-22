@@ -8,10 +8,11 @@ from .renderer import BinauralRenderer
 from .utils import normalize_file
 from itertools import chain
 import sys
+from types import MethodType
 """this is a modified version of render_file.py from the EAR. It was modified to adapt to the binaural rendering structure."""
 
 
-def _load_binaural_output_layout(driver):
+def _load_binaural_output_layout(self):
     spkr_layout = BinauralOutput()
     upmix = None
     n_channels = 2
@@ -19,7 +20,7 @@ def _load_binaural_output_layout(driver):
     return spkr_layout, upmix, n_channels
 
 
-def _render_input_file_binaural(driver,
+def _render_input_file_binaural(self,
                                 infile,
                                 spkr_layout,
                                 virtual_layout,
@@ -37,10 +38,10 @@ def _render_input_file_binaural(driver,
     renderer = BinauralRenderer(spkr_layout,
                                 virtual_layout,
                                 sr=infile.sampleRate,
-                                **driver.config)
-    renderer.set_rendering_items(driver.get_rendering_items(infile.adm))
+                                **self.config)
+    renderer.set_rendering_items(self.get_rendering_items(infile.adm))
 
-    for input_samples in chain(infile.iter_sample_blocks(driver.blocksize),
+    for input_samples in chain(infile.iter_sample_blocks(self.blocksize),
                                [None]):
         if input_samples is None:
             output_samples = renderer.get_tail(infile.sampleRate,
@@ -48,7 +49,7 @@ def _render_input_file_binaural(driver,
         else:
             output_samples = renderer.render(infile.sampleRate, input_samples)
 
-        output_samples *= driver.output_gain_linear
+        output_samples *= self.output_gain_linear
 
         if upmix is not None:
             output_samples *= upmix
@@ -100,8 +101,10 @@ def render_file():
             conversion_mode=args.apply_conversion,
         )
 
-        driver.load_output_layout = _load_binaural_output_layout
-        driver.render_input_file = _render_input_file_binaural
+        driver.load_output_layout = MethodType(_load_binaural_output_layout,
+                                               driver)
+        driver.render_input_file = MethodType(_render_input_file_binaural,
+                                              driver)
 
         driver.run(args.input_file, args.output_file)
 
