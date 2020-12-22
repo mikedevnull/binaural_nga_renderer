@@ -9,32 +9,8 @@ from .binaural_layout import BinauralOutput
 from .renderer import BinauralRenderer
 from itertools import chain
 import sys
-
 """this is a modified version of render_file.py from the EAR. It was modified to adapt to the binaural rendering structure."""
 
-def _run(driver, input_file, output_file):
-    """Render input_file to output_file."""
-    spkr_layout, upmix, n_channels = driver.load_output_layout(driver)
-    virtual_layout = driver.target_layout
-
-    output_monitor = PeakMonitor(n_channels)
-
-    with openBw64Adm(input_file, driver.enable_block_duration_fix) as infile:
-        formatInfo = FormatInfoChunk(formatTag=1,
-                                     channelCount=n_channels,
-                                     sampleRate=infile.sampleRate,
-                                     bitsPerSample=infile.bitdepth)
-        with openBw64(output_file, "w", formatInfo=formatInfo) as outfile:
-            for output_block in driver.render_input_file(driver, infile, spkr_layout, virtual_layout, upmix):
-                output_monitor.process(output_block)
-                outfile.write(output_block)
-
-    output_monitor.warn_overloaded()
-    if driver.fail_on_overload and output_monitor.has_overloaded():
-        sys.exit("error: output overloaded")
-
-    normalized_output = normalize(AudioSegment.from_file(output_file), headroom=0.3)
-    normalized_output.export(output_file, format="wav")
 
 def _load_binaural_output_layout(driver):
     spkr_layout = BinauralOutput()
@@ -44,7 +20,11 @@ def _load_binaural_output_layout(driver):
     return spkr_layout, upmix, n_channels
 
 
-def _render_input_file_binaural(driver, infile, spkr_layout, virtual_layout, upmix=None):
+def _render_input_file_binaural(driver,
+                                infile,
+                                spkr_layout,
+                                virtual_layout,
+                                upmix=None):
     """Get sample blocks of the input file after rendering.
 
         Parameters:
@@ -77,55 +57,23 @@ def _render_input_file_binaural(driver, infile, spkr_layout, virtual_layout, upm
         yield output_samples
 
 
-def add_commands_for_offline_driver(parser):
-    """
-    This is essentially a modified version of OfflineRendererDriver.add_args()
-    for the binaural use case.
-    """
-    formats_string = ", ".join(bs2051.layout_names)
-    parser.add_argument("-s", "--system", required=False, metavar="target_system",
-                            help="Target output system, accoring to ITU-R BS.2051. "
-                                 "Available systems are: {}".format(formats_string))
-    parser.add_argument("--output-gain-db",
-                        type=float,
-                        metavar="gain_db",
-                        default=0,
-                        help="output gain in dB (default: 0)")
-    parser.add_argument(
-        "--fail-on-overload",
-        "-c",
-        action="store_true",
-        help="fail if an overload condition is detected in the output")
-    parser.add_argument(
-        "--enable-block-duration-fix",
-        action="store_true",
-        help="automatically try to fix faulty block format durations")
-
-    parser.add_argument("--programme",
-                        metavar="id",
-                        help="select an audioProgramme to render by ID")
-    parser.add_argument(
-        "--comp-object",
-        metavar="id",
-        action="append",
-        default=[],
-        help="select an audioObject by ID from a complementary group")
-
-    parser.add_argument(
-        '--apply-conversion',
-        choices=("to_cartesian", "to_polar"),
-        help='Apply conversion to Objects audioBlockFormats before rendering')
-
-
 def parse_command_line():
-    parser = argparse.ArgumentParser(description="Binaural ADM renderer")
+    parser = argparse.ArgumentParser(description="Binaural ADM renderer",
+                                     conflict_handler='resolve')
 
     parser.add_argument("-d",
                         "--debug",
                         help="print debug information when an error occurs",
                         action="store_true")
 
-    add_commands_for_offline_driver(parser)
+    OfflineRenderDriver.add_args(parser)
+
+    # supress the "target system" command line option, as this doesn't make sense for binaural
+    # (target system is _always_ binaural)
+    parser.add_argument("-s",
+                        "--system",
+                        required=False,
+                        help=argparse.SUPPRESS)
 
     parser.add_argument("input_file")
     parser.add_argument("output_file")
@@ -133,14 +81,12 @@ def parse_command_line():
     parser.add_argument("--strict",
                         help="treat unknown ADM attributes as errors",
                         action="store_true")
-
     args = parser.parse_args()
     return args
 
 
 def render_file():
     args = parse_command_line()
-
     handle_strict(args)
 
     try:
@@ -157,12 +103,15 @@ def render_file():
 
         driver.load_output_layout = _load_binaural_output_layout
         driver.render_input_file = _render_input_file_binaural
-        driver.run = _run
 
-        driver.run(driver, args.input_file, args.output_file)
+        driver.run(args.input_file, args.output_file)
+
+        normalized_output = normalize(AudioSegment.from_file(args.output_file),
+                                      headroom=0.3)
+        normalized_output.export(args.output_fil, format="wav")
+
     except Exception as error:
         if args.debug:
             raise
         else:
             sys.exit(str(error))
-
