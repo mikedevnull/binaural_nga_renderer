@@ -1,12 +1,11 @@
 import argparse
 from ear.cmdline.render_file import OfflineRenderDriver, handle_strict, PeakMonitor
-from pydub import AudioSegment
-from pydub.effects import normalize
 from ear.core import bs2051, layout
 from ear.fileio import openBw64, openBw64Adm
 from ear.fileio.bw64.chunks import FormatInfoChunk
 from .binaural_layout import BinauralOutput
 from .renderer import BinauralRenderer
+from .utils import normalize_file
 from itertools import chain
 import sys
 """this is a modified version of render_file.py from the EAR. It was modified to adapt to the binaural rendering structure."""
@@ -106,9 +105,7 @@ def render_file():
 
         driver.run(args.input_file, args.output_file)
 
-        normalized_output = normalize(AudioSegment.from_file(args.output_file),
-                                      headroom=0.3)
-        normalized_output.export(args.output_fil, format="wav")
+        normalize_file(args.output_file, args.output_file)
 
     except Exception as error:
         if args.debug:
